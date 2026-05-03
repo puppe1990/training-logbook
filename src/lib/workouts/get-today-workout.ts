@@ -63,6 +63,18 @@ export function buildTodayWorkoutViewModel(
   const exercises = [...input.exercises]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((exercise) => {
+      const hasOutOfRangeLoggedSet = exercise.loggedSets.some(
+        (loggedSet) =>
+          loggedSet.setNumber < 1 ||
+          loggedSet.setNumber > exercise.prescribedSets,
+      );
+
+      if (hasOutOfRangeLoggedSet) {
+        throw new Error(
+          `Logged set number exceeds prescribed sets for day exercise ${exercise.dayExerciseId}`,
+        );
+      }
+
       const loggedSetsByNumber = new Map(
         exercise.loggedSets.map((loggedSet) => [
           loggedSet.setNumber,
@@ -94,7 +106,8 @@ export function buildTodayWorkoutViewModel(
         name: exercise.name,
         imageUrl: exercise.imageUrl,
         previousPerformance: exercise.previousPerformance,
-        isExerciseCompleted: sets.some((set) => set.isCompleted),
+        isExerciseCompleted:
+          sets.length > 0 && sets.every((set) => set.isCompleted),
         sets,
       };
     });
