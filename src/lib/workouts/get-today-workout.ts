@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull, or } from "drizzle-orm";
 
 import {
   dayExercises,
@@ -172,6 +172,8 @@ export async function getTodayWorkout(
       repMin: dayExercises.repMin,
       repMax: dayExercises.repMax,
       imageUrl: exerciseImages.imageUrl,
+      entryDayExerciseId: sessionEntries.dayExerciseId,
+      entryExerciseId: sessionEntries.exerciseId,
       entrySetNumber: sessionEntries.setNumber,
       entryPerformedReps: sessionEntries.performedReps,
       entryWeightValue: sessionEntries.weightValue,
@@ -204,7 +206,16 @@ export async function getTodayWorkout(
     )
     .leftJoin(
       sessionEntries,
-      eq(sessionEntries.workoutSessionId, workoutSessions.id),
+      and(
+        eq(sessionEntries.workoutSessionId, workoutSessions.id),
+        or(
+          eq(sessionEntries.dayExerciseId, dayExercises.id),
+          and(
+            isNull(sessionEntries.dayExerciseId),
+            eq(sessionEntries.exerciseId, exercises.id),
+          ),
+        ),
+      ),
     )
     .where(
       and(eq(workoutPlans.userId, userId), eq(workoutPlans.isActive, true)),
@@ -237,7 +248,12 @@ export async function getTodayWorkout(
       exercisesByDayExerciseId.set(row.dayExerciseId, exercise);
     }
 
-    if (row.entrySetNumber !== null) {
+    const entryMatchesCurrentExercise =
+      row.entryDayExerciseId === row.dayExerciseId ||
+      (row.entryDayExerciseId === null &&
+        row.entryExerciseId === row.exerciseId);
+
+    if (row.entrySetNumber !== null && entryMatchesCurrentExercise) {
       exercise.loggedSets.push({
         setNumber: row.entrySetNumber,
         performedReps: row.entryPerformedReps,
