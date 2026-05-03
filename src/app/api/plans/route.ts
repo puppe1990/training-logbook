@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
-import { getSession } from "@/lib/session";
+import { getSessionFromHeaders } from "@/lib/session";
 
 type PlanRequestBody = {
   name?: string;
 };
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const session = await getSessionFromHeaders(request.headers);
 
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

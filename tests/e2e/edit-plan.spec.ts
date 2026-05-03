@@ -3,10 +3,11 @@ import { expect, test } from "@playwright/test";
 test("editor asks unauthenticated visitors to sign in", async ({ page }) => {
   await page.goto("/editor");
 
+  await expect(page).toHaveURL(/\/$/);
   await expect(
-    page.getByRole("heading", { name: "Sign in to edit your plan" }),
+    page.getByRole("heading", { name: /training logbook/i }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Go to login" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
 });
 
 test("library renders the current exercise cards", async ({ page }) => {

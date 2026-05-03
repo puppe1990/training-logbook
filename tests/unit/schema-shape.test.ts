@@ -23,28 +23,32 @@ describe("schema", () => {
     expect(getTableConfig(sessionEntries).name).toBe("session_entries");
     expect(getTableConfig(exerciseImages).name).toBe("exercise_images");
 
-    expect(getTableConfig(dayExercises).columns.map((column) => column.name)).toEqual(
-      [
-        "id",
-        "workout_day_id",
-        "exercise_id",
-        "sort_order",
-        "prescribed_sets",
-        "rep_min",
-        "rep_max",
-        "instruction",
-      ],
-    );
+    expect(
+      getTableConfig(dayExercises).columns.map((column) => column.name),
+    ).toEqual([
+      "id",
+      "workout_day_id",
+      "exercise_id",
+      "sort_order",
+      "prescribed_sets",
+      "rep_min",
+      "rep_max",
+      "instruction",
+    ]);
   });
 
   it("defines integrity constraints and indexes for workout queries", () => {
-    expect(getTableConfig(workoutDays).checks.map((check) => check.name)).toEqual(
+    expect(
+      getTableConfig(workoutDays).checks.map((check) => check.name),
+    ).toEqual(
       expect.arrayContaining([
         "workout_days_weekday_range_check",
         "workout_days_sort_order_positive_check",
       ]),
     );
-    expect(getTableConfig(dayExercises).checks.map((check) => check.name)).toEqual(
+    expect(
+      getTableConfig(dayExercises).checks.map((check) => check.name),
+    ).toEqual(
       expect.arrayContaining([
         "day_exercises_sort_order_positive_check",
         "day_exercises_prescribed_sets_positive_check",
@@ -63,16 +67,20 @@ describe("schema", () => {
       ]),
     );
 
-    expect(getTableConfig(workoutPlans).indexes.map((index) => index.config.name)).toContain(
-      "workout_plans_user_id_idx",
-    );
-    expect(getTableConfig(workoutDays).indexes.map((index) => index.config.name)).toEqual(
+    expect(
+      getTableConfig(workoutPlans).indexes.map((index) => index.config.name),
+    ).toContain("workout_plans_user_id_idx");
+    expect(
+      getTableConfig(workoutDays).indexes.map((index) => index.config.name),
+    ).toEqual(
       expect.arrayContaining([
         "workout_days_plan_id_idx",
         "workout_days_plan_sort_idx",
       ]),
     );
-    expect(getTableConfig(dayExercises).indexes.map((index) => index.config.name)).toEqual(
+    expect(
+      getTableConfig(dayExercises).indexes.map((index) => index.config.name),
+    ).toEqual(
       expect.arrayContaining([
         "day_exercises_workout_day_id_idx",
         "day_exercises_day_sort_idx",

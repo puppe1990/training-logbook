@@ -5,7 +5,9 @@ export function SessionNote() {
     <section className="space-y-3 rounded-3xl border border-zinc-800 bg-zinc-900/60 p-5">
       <div className="space-y-1">
         <h2 className="text-base font-semibold text-zinc-50">Session note</h2>
-        <p className="text-sm text-zinc-400">Add a short note for this workout.</p>
+        <p className="text-sm text-zinc-400">
+          Add a short note for this workout.
+        </p>
       </div>
 
       <textarea

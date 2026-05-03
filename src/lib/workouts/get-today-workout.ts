@@ -15,7 +15,9 @@ export type TodayWorkoutViewModel = {
   exercises: TodayWorkoutExercise[];
 };
 
-export function buildTodayWorkoutViewModel(input: TodayWorkoutInput): TodayWorkoutViewModel {
+export function buildTodayWorkoutViewModel(
+  input: TodayWorkoutInput,
+): TodayWorkoutViewModel {
   return {
     dayName: input.dayName,
     exercises: [...input.exercises].sort((a, b) => a.sortOrder - b.sortOrder),

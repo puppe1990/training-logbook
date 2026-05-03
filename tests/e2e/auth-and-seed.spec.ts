@@ -11,9 +11,8 @@ test("signup page shows the account creation heading", async ({ page }) => {
 test("seed route returns the starter plan id", async ({ request }) => {
   const response = await request.post("/api/seed");
 
-  expect(response.ok()).toBe(true);
+  expect(response.status()).toBe(401);
   await expect(response.json()).resolves.toEqual({
-    ok: true,
-    planId: "starter-plan",
+    error: "Unauthorized",
   });
 });

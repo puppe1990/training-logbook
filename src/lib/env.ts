@@ -11,9 +11,7 @@ export type DatabaseEnv = Pick<AppEnv, "tursoUrl" | "tursoAuthToken">;
 
 export type AuthEnv = Pick<AppEnv, "authSecret" | "authUrl">;
 
-function requireValue(
-  value: string | undefined,
-): string {
+function requireValue(value: string | undefined): string {
   if (!value) {
     throw new Error("Missing required environment variables");
   }

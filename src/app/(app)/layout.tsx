@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
 
 import { AppNav } from "@/components/app-nav";
+import { requireSession } from "@/lib/session";
 
-export default function AppLayout({ children }: { children: ReactNode }) {
+export default async function AppLayout({ children }: { children: ReactNode }) {
+  await requireSession("/");
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50">
       <header className="border-b border-zinc-900">
