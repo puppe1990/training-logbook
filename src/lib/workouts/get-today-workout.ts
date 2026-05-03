@@ -1,3 +1,15 @@
+import { and, asc, eq } from "drizzle-orm";
+
+import {
+  dayExercises,
+  exerciseImages,
+  exercises,
+  sessionEntries,
+  workoutDays,
+  workoutPlans,
+  workoutSessions,
+} from "@/lib/db/schema";
+
 export type TodayWorkoutExerciseInput = {
   dayExerciseId: string;
   exerciseId: string;
@@ -13,7 +25,7 @@ export type TodayWorkoutExerciseInput = {
 
 export type TodayWorkoutInput = {
   dayName: string;
-  sessionId: string;
+  sessionId: string | null;
   exercises: TodayWorkoutExerciseInput[];
 };
 
@@ -51,7 +63,7 @@ export type TodayWorkoutExercise = {
 
 export type TodayWorkoutViewModel = {
   dayName: string;
-  sessionId: string;
+  sessionId: string | null;
   completedExerciseCount: number;
   totalExerciseCount: number;
   exercises: TodayWorkoutExercise[];
@@ -133,14 +145,111 @@ export function buildTodayWorkoutViewModel(
   };
 }
 
+function getTodayDateString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = `${today.getMonth() + 1}`.padStart(2, "0");
+  const day = `${today.getDate()}`.padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 export async function getTodayWorkout(
   userId: string,
   weekday: number,
 ): Promise<TodayWorkoutViewModel | null> {
-  void userId;
-  void weekday;
+  const { db } = await import("@/lib/db");
 
-  // Query the active plan, matching workout day, day exercises, exercise images,
-  // and latest session entries here once the surrounding data plumbing is ready.
-  return null;
+  const rows = await db
+    .select({
+      dayName: workoutDays.name,
+      sessionId: workoutSessions.id,
+      dayExerciseId: dayExercises.id,
+      exerciseId: exercises.id,
+      sortOrder: dayExercises.sortOrder,
+      exerciseName: exercises.name,
+      prescribedSets: dayExercises.prescribedSets,
+      repMin: dayExercises.repMin,
+      repMax: dayExercises.repMax,
+      imageUrl: exerciseImages.imageUrl,
+      entrySetNumber: sessionEntries.setNumber,
+      entryPerformedReps: sessionEntries.performedReps,
+      entryWeightValue: sessionEntries.weightValue,
+      entryIsCompleted: sessionEntries.isCompleted,
+    })
+    .from(workoutPlans)
+    .innerJoin(
+      workoutDays,
+      and(
+        eq(workoutDays.planId, workoutPlans.id),
+        eq(workoutDays.weekday, weekday),
+      ),
+    )
+    .innerJoin(dayExercises, eq(dayExercises.workoutDayId, workoutDays.id))
+    .innerJoin(exercises, eq(exercises.id, dayExercises.exerciseId))
+    .leftJoin(
+      exerciseImages,
+      and(
+        eq(exerciseImages.exerciseId, exercises.id),
+        eq(exerciseImages.isPrimary, true),
+      ),
+    )
+    .leftJoin(
+      workoutSessions,
+      and(
+        eq(workoutSessions.userId, userId),
+        eq(workoutSessions.workoutDayId, workoutDays.id),
+        eq(workoutSessions.performedOn, getTodayDateString()),
+      ),
+    )
+    .leftJoin(
+      sessionEntries,
+      eq(sessionEntries.workoutSessionId, workoutSessions.id),
+    )
+    .where(
+      and(eq(workoutPlans.userId, userId), eq(workoutPlans.isActive, true)),
+    )
+    .orderBy(asc(dayExercises.sortOrder), asc(sessionEntries.setNumber));
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const exercisesByDayExerciseId = new Map<string, TodayWorkoutExerciseInput>();
+
+  for (const row of rows) {
+    let exercise = exercisesByDayExerciseId.get(row.dayExerciseId);
+
+    if (!exercise) {
+      exercise = {
+        dayExerciseId: row.dayExerciseId,
+        exerciseId: row.exerciseId,
+        sortOrder: row.sortOrder,
+        name: row.exerciseName,
+        prescribedSets: row.prescribedSets,
+        repMin: row.repMin,
+        repMax: row.repMax,
+        imageUrl: row.imageUrl,
+        previousPerformance: null,
+        loggedSets: [],
+      };
+
+      exercisesByDayExerciseId.set(row.dayExerciseId, exercise);
+    }
+
+    if (row.entrySetNumber !== null) {
+      exercise.loggedSets.push({
+        setNumber: row.entrySetNumber,
+        performedReps: row.entryPerformedReps,
+        weightValue: row.entryWeightValue,
+        isCompleted: row.entryIsCompleted ?? false,
+      });
+    }
+  }
+
+  return buildTodayWorkoutViewModel({
+    dayName: rows[0].dayName,
+    sessionId: rows[0].sessionId,
+    exercises: [...exercisesByDayExerciseId.values()],
+  });
 }
