@@ -75,6 +75,16 @@ export function buildTodayWorkoutViewModel(
         );
       }
 
+      const uniqueLoggedSetNumbers = new Set(
+        exercise.loggedSets.map((loggedSet) => loggedSet.setNumber),
+      );
+
+      if (uniqueLoggedSetNumbers.size !== exercise.loggedSets.length) {
+        throw new Error(
+          `Logged sets contain duplicate set number for day exercise ${exercise.dayExerciseId}`,
+        );
+      }
+
       const loggedSetsByNumber = new Map(
         exercise.loggedSets.map((loggedSet) => [
           loggedSet.setNumber,

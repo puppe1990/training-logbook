@@ -186,4 +186,40 @@ describe("buildTodayWorkoutViewModel", () => {
       }),
     ).toThrow(/exceeds prescribed sets/i);
   });
+
+  it("throws when logged sets contain duplicate set numbers", () => {
+    expect(() =>
+      buildTodayWorkoutViewModel({
+        dayName: "Upper 1",
+        sessionId: "session-1",
+        exercises: [
+          {
+            dayExerciseId: "de-1",
+            exerciseId: "ex-1",
+            sortOrder: 1,
+            name: "Supino reto maquina",
+            prescribedSets: 2,
+            repMin: 6,
+            repMax: 10,
+            imageUrl: null,
+            previousPerformance: null,
+            loggedSets: [
+              {
+                setNumber: 1,
+                performedReps: 8,
+                weightValue: 70,
+                isCompleted: true,
+              },
+              {
+                setNumber: 1,
+                performedReps: 9,
+                weightValue: 72,
+                isCompleted: true,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/duplicate set number/i);
+  });
 });
