@@ -228,6 +228,131 @@ describe("session entries route", () => {
     });
   });
 
+  it("updates an existing entry when dayExerciseId is omitted on repeated posts", async () => {
+    getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
+
+    const whereClauses: Array<ReturnType<typeof getSqlColumnsAndValues>> = [];
+    const selectLimit = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "entry-1",
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          setNumber: 1,
+          dayExerciseId: null,
+        },
+      ]);
+    const selectWhere = vi.fn((expression: unknown) => {
+      whereClauses.push(getSqlColumnsAndValues(expression));
+
+      return { limit: selectLimit };
+    });
+    const selectFrom = vi.fn(() => ({ where: selectWhere }));
+    db.select.mockReturnValue({ from: selectFrom });
+
+    const createdEntry = {
+      id: "entry-1",
+      workoutSessionId: "session-1",
+      exerciseId: "exercise-1",
+      setNumber: 1,
+      dayExerciseId: null,
+      performedReps: 8,
+      weightValue: 50,
+      targetRepsMin: null,
+      targetRepsMax: null,
+      note: null,
+      isCompleted: false,
+    };
+    const updatedEntry = {
+      id: "entry-1",
+      workoutSessionId: "session-1",
+      exerciseId: "exercise-1",
+      setNumber: 1,
+      dayExerciseId: null,
+      performedReps: 10,
+      weightValue: 55,
+      targetRepsMin: null,
+      targetRepsMax: null,
+      note: null,
+      isCompleted: true,
+    };
+
+    const updateReturning = vi.fn().mockResolvedValue([updatedEntry]);
+    const updateWhere = vi.fn(() => ({ returning: updateReturning }));
+    const updateSet = vi.fn(() => ({ where: updateWhere }));
+    db.update.mockReturnValue({ set: updateSet });
+
+    const insertReturning = vi.fn().mockResolvedValue([createdEntry]);
+    const insertValues = vi.fn(() => ({ returning: insertReturning }));
+    db.insert.mockReturnValue({ values: insertValues });
+
+    const firstResponse = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          setNumber: "1",
+          performedReps: "8",
+          weightValue: "50",
+          isCompleted: false,
+        }),
+      }),
+    );
+    const secondResponse = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          setNumber: "1",
+          performedReps: "10",
+          weightValue: "55",
+          isCompleted: true,
+        }),
+      }),
+    );
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    await expect(firstResponse.json()).resolves.toEqual({
+      entry: createdEntry,
+    });
+    await expect(secondResponse.json()).resolves.toEqual({
+      entry: updatedEntry,
+    });
+    expect(db.insert).toHaveBeenCalledTimes(1);
+    expect(db.update).toHaveBeenCalledTimes(1);
+    expect(whereClauses).toHaveLength(2);
+    expect(whereClauses[0]).toEqual(
+      expect.objectContaining({
+        columns: expect.arrayContaining(["exercise_id", "day_exercise_id"]),
+        values: expect.arrayContaining(["exercise-1", 1, "session-1"]),
+      }),
+    );
+    expect(whereClauses[0]?.values).not.toContain("de-1");
+    expect(updateSet).toHaveBeenCalledWith({
+      workoutSessionId: "session-1",
+      exerciseId: "exercise-1",
+      setNumber: 1,
+      performedReps: 10,
+      weightValue: 55,
+      targetRepsMin: null,
+      targetRepsMax: null,
+      note: null,
+      isCompleted: true,
+      dayExerciseId: null,
+    });
+  });
+
   it("creates separate entries for duplicate exercise slots with different dayExerciseId values", async () => {
     getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
 

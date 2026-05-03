@@ -660,4 +660,108 @@ describe("buildTodayWorkoutViewModel", () => {
       ],
     });
   });
+
+  it("does not duplicate an ambiguous legacy entry across repeated exercise slots", async () => {
+    mockTodayWorkoutRows([
+      {
+        dayName: "Upper 1",
+        sessionId: "session-1",
+        dayExerciseId: "de-1",
+        exerciseId: "ex-1",
+        sortOrder: 1,
+        exerciseName: "Supino reto maquina",
+        prescribedSets: 2,
+        repMin: 6,
+        repMax: 10,
+        imageUrl: "https://example.com/supino.jpg",
+        entryDayExerciseId: null,
+        entryExerciseId: "ex-1",
+        entrySetNumber: 1,
+        entryPerformedReps: 8,
+        entryWeightValue: 70,
+        entryIsCompleted: true,
+      },
+      {
+        dayName: "Upper 1",
+        sessionId: "session-1",
+        dayExerciseId: "de-2",
+        exerciseId: "ex-1",
+        sortOrder: 2,
+        exerciseName: "Supino reto maquina",
+        prescribedSets: 2,
+        repMin: 6,
+        repMax: 10,
+        imageUrl: "https://example.com/supino.jpg",
+        entryDayExerciseId: null,
+        entryExerciseId: "ex-1",
+        entrySetNumber: 1,
+        entryPerformedReps: 8,
+        entryWeightValue: 70,
+        entryIsCompleted: true,
+      },
+    ]);
+
+    await expect(getTodayWorkout("user-1", 1)).resolves.toEqual({
+      dayName: "Upper 1",
+      sessionId: "session-1",
+      completedExerciseCount: 0,
+      totalExerciseCount: 2,
+      exercises: [
+        {
+          dayExerciseId: "de-1",
+          exerciseId: "ex-1",
+          sortOrder: 1,
+          name: "Supino reto maquina",
+          imageUrl: "https://example.com/supino.jpg",
+          previousPerformance: null,
+          isExerciseCompleted: false,
+          sets: [
+            {
+              setNumber: 1,
+              targetRepsMin: 6,
+              targetRepsMax: 10,
+              performedReps: null,
+              weightValue: null,
+              isCompleted: false,
+            },
+            {
+              setNumber: 2,
+              targetRepsMin: 6,
+              targetRepsMax: 10,
+              performedReps: null,
+              weightValue: null,
+              isCompleted: false,
+            },
+          ],
+        },
+        {
+          dayExerciseId: "de-2",
+          exerciseId: "ex-1",
+          sortOrder: 2,
+          name: "Supino reto maquina",
+          imageUrl: "https://example.com/supino.jpg",
+          previousPerformance: null,
+          isExerciseCompleted: false,
+          sets: [
+            {
+              setNumber: 1,
+              targetRepsMin: 6,
+              targetRepsMax: 10,
+              performedReps: null,
+              weightValue: null,
+              isCompleted: false,
+            },
+            {
+              setNumber: 2,
+              targetRepsMin: 6,
+              targetRepsMax: 10,
+              performedReps: null,
+              weightValue: null,
+              isCompleted: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
 });

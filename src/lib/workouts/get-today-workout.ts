@@ -233,6 +233,16 @@ export async function getTodayWorkout(
     return null;
   }
 
+  const dayExerciseIdsByExerciseId = new Map<string, Set<string>>();
+
+  for (const row of rows) {
+    const dayExerciseIds =
+      dayExerciseIdsByExerciseId.get(row.exerciseId) ?? new Set<string>();
+
+    dayExerciseIds.add(row.dayExerciseId);
+    dayExerciseIdsByExerciseId.set(row.exerciseId, dayExerciseIds);
+  }
+
   const exercisesByDayExerciseId = new Map<string, TodayWorkoutExerciseInput>();
 
   for (const row of rows) {
@@ -255,10 +265,13 @@ export async function getTodayWorkout(
       exercisesByDayExerciseId.set(row.dayExerciseId, exercise);
     }
 
+    const hasDuplicateExerciseSlots =
+      (dayExerciseIdsByExerciseId.get(row.exerciseId)?.size ?? 0) > 1;
     const entryMatchesCurrentExercise =
       row.entryDayExerciseId === row.dayExerciseId ||
       (row.entryDayExerciseId === null &&
-        row.entryExerciseId === row.exerciseId);
+        row.entryExerciseId === row.exerciseId &&
+        !hasDuplicateExerciseSlots);
 
     if (row.entrySetNumber !== null && entryMatchesCurrentExercise) {
       exercise.loggedSets.push({
