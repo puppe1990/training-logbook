@@ -1,0 +1,11 @@
+.next
+coverage
+node_modules
+playwright-report
+test-results
+*.log
+tsconfig.tsbuildinfo
+.env.local
+.env.*.local
+local.db
+.superpowers
