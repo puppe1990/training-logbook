@@ -162,7 +162,7 @@ function getTodayWorkoutContext(referenceDate = new Date()) {
 
 export async function getTodayWorkout(
   userId: string,
-  _weekday?: number,
+  weekday: number,
 ): Promise<TodayWorkoutViewModel | null> {
   const { db } = await import("@/lib/db");
   const today = getTodayWorkoutContext();
@@ -191,7 +191,7 @@ export async function getTodayWorkout(
       workoutDays,
       and(
         eq(workoutDays.planId, workoutPlans.id),
-        eq(workoutDays.weekday, today.weekday),
+        eq(workoutDays.weekday, weekday),
       ),
     )
     .innerJoin(dayExercises, eq(dayExercises.workoutDayId, workoutDays.id))

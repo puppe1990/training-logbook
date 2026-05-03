@@ -311,7 +311,7 @@ describe("buildTodayWorkoutViewModel", () => {
     await expect(getTodayWorkout("user-1", 1)).resolves.toBeNull();
   });
 
-  it("derives weekday and performed-on date from the same current date", async () => {
+  it("uses the provided weekday while keeping performed-on derived from one current date", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 4, 4, 9, 30, 0));
 
@@ -325,10 +325,9 @@ describe("buildTodayWorkoutViewModel", () => {
     expect(getSqlColumnsAndValues(workoutDayJoin)).toEqual(
       expect.objectContaining({
         columns: expect.arrayContaining(["weekday"]),
-        values: expect.arrayContaining([1]),
+        values: expect.arrayContaining([0]),
       }),
     );
-    expect(getSqlColumnsAndValues(workoutDayJoin).values).not.toContain(0);
     expect(getSqlColumnsAndValues(workoutSessionJoin)).toEqual(
       expect.objectContaining({
         columns: expect.arrayContaining(["performed_on"]),
