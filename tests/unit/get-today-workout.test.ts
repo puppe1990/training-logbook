@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { db } = vi.hoisted(() => ({
   db: {
@@ -14,6 +14,46 @@ import {
   buildTodayWorkoutViewModel,
   getTodayWorkout,
 } from "@/lib/workouts/get-today-workout";
+
+function getSqlColumnsAndValues(expression: unknown) {
+  const columns: string[] = [];
+  const values: Array<string | number | null> = [];
+
+  function walk(node: unknown) {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        walk(item);
+      }
+
+      return;
+    }
+
+    if ("name" in node && typeof node.name === "string") {
+      columns.push(node.name);
+    }
+
+    if (
+      "value" in node &&
+      (typeof node.value === "string" ||
+        typeof node.value === "number" ||
+        node.value === null)
+    ) {
+      values.push(node.value);
+    }
+
+    if ("queryChunks" in node && Array.isArray(node.queryChunks)) {
+      walk(node.queryChunks);
+    }
+  }
+
+  walk(expression);
+
+  return { columns, values };
+}
 
 function mockTodayWorkoutRows(rows: unknown[]) {
   const query = {
@@ -38,6 +78,10 @@ function mockTodayWorkoutRows(rows: unknown[]) {
 describe("buildTodayWorkoutViewModel", () => {
   beforeEach(() => {
     db.select.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("builds a sorted today workout view model from prescribed and logged sets", () => {
@@ -265,6 +309,32 @@ describe("buildTodayWorkoutViewModel", () => {
     mockTodayWorkoutRows([]);
 
     await expect(getTodayWorkout("user-1", 1)).resolves.toBeNull();
+  });
+
+  it("derives weekday and performed-on date from the same current date", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 4, 4, 9, 30, 0));
+
+    const query = mockTodayWorkoutRows([]);
+
+    await expect(getTodayWorkout("user-1", 0)).resolves.toBeNull();
+
+    const workoutDayJoin = query.innerJoin.mock.calls[0]?.[1];
+    const workoutSessionJoin = query.leftJoin.mock.calls[1]?.[1];
+
+    expect(getSqlColumnsAndValues(workoutDayJoin)).toEqual(
+      expect.objectContaining({
+        columns: expect.arrayContaining(["weekday"]),
+        values: expect.arrayContaining([1]),
+      }),
+    );
+    expect(getSqlColumnsAndValues(workoutDayJoin).values).not.toContain(0);
+    expect(getSqlColumnsAndValues(workoutSessionJoin)).toEqual(
+      expect.objectContaining({
+        columns: expect.arrayContaining(["performed_on"]),
+        values: expect.arrayContaining(["2026-05-04"]),
+      }),
+    );
   });
 
   it("returns the workout day with a null session id when no session exists for today", async () => {

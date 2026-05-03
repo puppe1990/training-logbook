@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getSessionFromHeaders } from "@/lib/session";
@@ -19,6 +19,49 @@ type SessionEntryRequestBody = {
   isCompleted?: boolean;
   dayExerciseId?: string | null;
 };
+
+async function findExistingSessionEntry(input: {
+  db: {
+    select: typeof import("@/lib/db").db.select;
+  };
+  workoutSessionId: string;
+  exerciseId: string;
+  setNumber: number;
+  dayExerciseId: string | null;
+}) {
+  const baseFilter = and(
+    eq(sessionEntries.workoutSessionId, input.workoutSessionId),
+    eq(sessionEntries.setNumber, input.setNumber),
+  );
+
+  if (input.dayExerciseId) {
+    const existingSlotEntry = await input.db
+      .select()
+      .from(sessionEntries)
+      .where(
+        and(baseFilter, eq(sessionEntries.dayExerciseId, input.dayExerciseId)),
+      )
+      .limit(1);
+
+    if (existingSlotEntry[0]) {
+      return existingSlotEntry[0];
+    }
+  }
+
+  const legacyEntry = await input.db
+    .select()
+    .from(sessionEntries)
+    .where(
+      and(
+        baseFilter,
+        eq(sessionEntries.exerciseId, input.exerciseId),
+        isNull(sessionEntries.dayExerciseId),
+      ),
+    )
+    .limit(1);
+
+  return legacyEntry[0] ?? null;
+}
 
 export async function POST(request: Request) {
   const session = await getSessionFromHeaders(request.headers);
@@ -43,17 +86,13 @@ export async function POST(request: Request) {
     weightValue: body.weightValue ?? "",
   });
 
-  const existingEntry = await db
-    .select()
-    .from(sessionEntries)
-    .where(
-      and(
-        eq(sessionEntries.workoutSessionId, body.workoutSessionId),
-        eq(sessionEntries.exerciseId, body.exerciseId),
-        eq(sessionEntries.setNumber, normalized.setNumber),
-      ),
-    )
-    .limit(1);
+  const existingEntry = await findExistingSessionEntry({
+    db,
+    workoutSessionId: body.workoutSessionId,
+    exerciseId: body.exerciseId,
+    setNumber: normalized.setNumber,
+    dayExerciseId: body.dayExerciseId ?? null,
+  });
 
   const data = {
     workoutSessionId: body.workoutSessionId,
@@ -74,11 +113,11 @@ export async function POST(request: Request) {
     dayExerciseId: body.dayExerciseId ?? null,
   };
 
-  if (existingEntry[0]) {
+  if (existingEntry) {
     const [updatedEntry] = await db
       .update(sessionEntries)
       .set(data)
-      .where(eq(sessionEntries.id, existingEntry[0].id))
+      .where(eq(sessionEntries.id, existingEntry.id))
       .returning();
 
     return NextResponse.json({ entry: updatedEntry });

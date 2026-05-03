@@ -19,6 +19,59 @@ vi.mock("@/lib/session", () => ({
   getSessionFromHeaders,
 }));
 
+function getSqlColumnsAndValues(expression: unknown) {
+  const columns: string[] = [];
+  const text: string[] = [];
+  const values: Array<string | number | null> = [];
+
+  function walk(node: unknown) {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        walk(item);
+      }
+
+      return;
+    }
+
+    if ("name" in node && typeof node.name === "string") {
+      columns.push(node.name);
+    }
+
+    if (
+      "value" in node &&
+      Array.isArray(node.value) &&
+      node.value.every((value) => typeof value === "string")
+    ) {
+      text.push(node.value.join(""));
+    }
+
+    if (
+      "value" in node &&
+      (typeof node.value === "string" ||
+        typeof node.value === "number" ||
+        node.value === null)
+    ) {
+      values.push(node.value);
+    }
+
+    if ("queryChunks" in node && Array.isArray(node.queryChunks)) {
+      walk(node.queryChunks);
+    }
+  }
+
+  walk(expression);
+
+  return {
+    columns,
+    text: text.join(""),
+    values,
+  };
+}
+
 describe("session entries route", () => {
   beforeEach(() => {
     db.select.mockReset();
@@ -42,8 +95,10 @@ describe("session entries route", () => {
   it("updates an existing entry when the same session exercise set is posted twice", async () => {
     getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
 
+    const whereClauses: Array<ReturnType<typeof getSqlColumnsAndValues>> = [];
     const selectLimit = vi
       .fn()
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
         {
@@ -51,9 +106,14 @@ describe("session entries route", () => {
           workoutSessionId: "session-1",
           exerciseId: "exercise-1",
           setNumber: 1,
+          dayExerciseId: "de-1",
         },
       ]);
-    const selectWhere = vi.fn(() => ({ limit: selectLimit }));
+    const selectWhere = vi.fn((expression: unknown) => {
+      whereClauses.push(getSqlColumnsAndValues(expression));
+
+      return { limit: selectLimit };
+    });
     const selectFrom = vi.fn(() => ({ where: selectWhere }));
     db.select.mockReturnValue({ from: selectFrom });
 
@@ -62,26 +122,26 @@ describe("session entries route", () => {
       workoutSessionId: "session-1",
       exerciseId: "exercise-1",
       setNumber: 1,
+      dayExerciseId: "de-1",
       performedReps: 8,
       weightValue: 50,
       targetRepsMin: null,
       targetRepsMax: null,
       note: null,
       isCompleted: false,
-      dayExerciseId: null,
     };
     const updatedEntry = {
       id: "entry-1",
       workoutSessionId: "session-1",
       exerciseId: "exercise-1",
       setNumber: 1,
+      dayExerciseId: "de-1",
       performedReps: 10,
       weightValue: 55,
       targetRepsMin: null,
       targetRepsMax: null,
       note: null,
       isCompleted: true,
-      dayExerciseId: null,
     };
 
     const updateReturning = vi.fn().mockResolvedValue([updatedEntry]);
@@ -96,6 +156,7 @@ describe("session entries route", () => {
     const firstPayload = {
       workoutSessionId: "session-1",
       exerciseId: "exercise-1",
+      dayExerciseId: "de-1",
       setNumber: "1",
       performedReps: "8",
       weightValue: "50",
@@ -104,6 +165,7 @@ describe("session entries route", () => {
     const secondPayload = {
       workoutSessionId: "session-1",
       exerciseId: "exercise-1",
+      dayExerciseId: "de-1",
       setNumber: "1",
       performedReps: "10",
       weightValue: "55",
@@ -139,6 +201,19 @@ describe("session entries route", () => {
     });
     expect(db.insert).toHaveBeenCalledTimes(1);
     expect(db.update).toHaveBeenCalledTimes(1);
+    expect(whereClauses).toHaveLength(3);
+    expect(whereClauses[0]).toEqual(
+      expect.objectContaining({
+        columns: expect.arrayContaining(["day_exercise_id"]),
+        values: expect.arrayContaining(["de-1"]),
+      }),
+    );
+    expect(whereClauses[1]).toEqual(
+      expect.objectContaining({
+        columns: expect.arrayContaining(["day_exercise_id", "exercise_id"]),
+      }),
+    );
+    expect(whereClauses[1]?.values).not.toContain("de-1");
     expect(updateSet).toHaveBeenCalledWith({
       workoutSessionId: "session-1",
       exerciseId: "exercise-1",
@@ -149,7 +224,148 @@ describe("session entries route", () => {
       targetRepsMax: null,
       note: null,
       isCompleted: true,
-      dayExerciseId: null,
+      dayExerciseId: "de-1",
     });
+  });
+
+  it("creates separate entries for duplicate exercise slots with different dayExerciseId values", async () => {
+    getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
+
+    const storedEntries: Array<{
+      id: string;
+      workoutSessionId: string;
+      exerciseId: string;
+      setNumber: number;
+      performedReps: number | null;
+      weightValue: number | null;
+      targetRepsMin: number | null;
+      targetRepsMax: number | null;
+      note: string | null;
+      isCompleted: boolean;
+      dayExerciseId: string | null;
+    }> = [];
+    const whereClauses: Array<ReturnType<typeof getSqlColumnsAndValues>> = [];
+
+    const selectWhere = vi.fn((expression: unknown) => {
+      const clause = getSqlColumnsAndValues(expression);
+      whereClauses.push(clause);
+
+      const requestedSessionId = clause.values.find(
+        (value) => typeof value === "string" && value.startsWith("session-"),
+      );
+      const requestedExerciseId = clause.values.find(
+        (value) => typeof value === "string" && value.startsWith("exercise-"),
+      );
+      const requestedDayExerciseId = clause.values.find(
+        (value) => typeof value === "string" && value.startsWith("de-"),
+      );
+      const requestedSetNumber = clause.values.find(
+        (value) => typeof value === "number",
+      );
+      const requiresNullDayExerciseId =
+        clause.columns.includes("day_exercise_id") &&
+        !clause.values.some(
+          (value) => typeof value === "string" && value.startsWith("de-"),
+        );
+
+      const existingEntry = storedEntries.find((entry) => {
+        if (
+          entry.workoutSessionId !== requestedSessionId ||
+          entry.setNumber !== requestedSetNumber
+        ) {
+          return false;
+        }
+
+        if (requestedDayExerciseId) {
+          return entry.dayExerciseId === requestedDayExerciseId;
+        }
+
+        if (requiresNullDayExerciseId) {
+          return (
+            entry.dayExerciseId === null &&
+            entry.exerciseId === requestedExerciseId
+          );
+        }
+
+        return entry.exerciseId === requestedExerciseId;
+      });
+
+      return {
+        limit: vi.fn().mockResolvedValue(existingEntry ? [existingEntry] : []),
+      };
+    });
+    const selectFrom = vi.fn(() => ({ where: selectWhere }));
+    db.select.mockReturnValue({ from: selectFrom });
+
+    const updateReturning = vi.fn(async () => {
+      const updatedEntry = storedEntries.at(-1);
+
+      return updatedEntry ? [updatedEntry] : [];
+    });
+    const updateWhere = vi.fn(() => ({ returning: updateReturning }));
+    const updateSet = vi.fn(() => ({ where: updateWhere }));
+    db.update.mockReturnValue({ set: updateSet });
+
+    const insertReturning = vi.fn(async () => {
+      const createdEntry = storedEntries.at(-1);
+
+      return createdEntry ? [createdEntry] : [];
+    });
+    const insertValues = vi.fn((entry) => {
+      storedEntries.push(entry);
+
+      return { returning: insertReturning };
+    });
+    db.insert.mockReturnValue({ values: insertValues });
+
+    const firstResponse = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          dayExerciseId: "de-1",
+          setNumber: "1",
+          performedReps: "8",
+          weightValue: "50",
+          isCompleted: true,
+        }),
+      }),
+    );
+    const secondResponse = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          dayExerciseId: "de-2",
+          setNumber: "1",
+          performedReps: "10",
+          weightValue: "55",
+          isCompleted: true,
+        }),
+      }),
+    );
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(db.insert).toHaveBeenCalledTimes(2);
+    expect(db.update).not.toHaveBeenCalled();
+    expect(whereClauses).toHaveLength(4);
+    expect(whereClauses[0]?.values).toContain("de-1");
+    expect(whereClauses[1]?.values).not.toContain("de-1");
+    expect(whereClauses[2]?.values).toContain("de-2");
+    expect(whereClauses[3]?.values).not.toContain("de-2");
+    expect(storedEntries).toHaveLength(2);
+    expect(storedEntries.map((entry) => entry.dayExerciseId)).toEqual([
+      "de-1",
+      "de-2",
+    ]);
   });
 });

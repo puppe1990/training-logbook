@@ -145,20 +145,27 @@ export function buildTodayWorkoutViewModel(
   };
 }
 
-function getTodayDateString() {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = `${today.getMonth() + 1}`.padStart(2, "0");
-  const day = `${today.getDate()}`.padStart(2, "0");
+function formatDateString(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
 
+function getTodayWorkoutContext(referenceDate = new Date()) {
+  return {
+    weekday: referenceDate.getDay(),
+    dateString: formatDateString(referenceDate),
+  };
+}
+
 export async function getTodayWorkout(
   userId: string,
-  weekday: number,
+  _weekday?: number,
 ): Promise<TodayWorkoutViewModel | null> {
   const { db } = await import("@/lib/db");
+  const today = getTodayWorkoutContext();
 
   const rows = await db
     .select({
@@ -184,7 +191,7 @@ export async function getTodayWorkout(
       workoutDays,
       and(
         eq(workoutDays.planId, workoutPlans.id),
-        eq(workoutDays.weekday, weekday),
+        eq(workoutDays.weekday, today.weekday),
       ),
     )
     .innerJoin(dayExercises, eq(dayExercises.workoutDayId, workoutDays.id))
@@ -201,7 +208,7 @@ export async function getTodayWorkout(
       and(
         eq(workoutSessions.userId, userId),
         eq(workoutSessions.workoutDayId, workoutDays.id),
-        eq(workoutSessions.performedOn, getTodayDateString()),
+        eq(workoutSessions.performedOn, today.dateString),
       ),
     )
     .leftJoin(
