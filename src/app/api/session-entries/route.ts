@@ -20,6 +20,11 @@ type SessionEntryRequestBody = {
   dayExerciseId?: string | null;
 };
 
+type ExistingSessionEntryLookupResult =
+  | { status: "found"; entry: { id: string } }
+  | { status: "missing" }
+  | { status: "ambiguous" };
+
 async function findExistingSessionEntry(input: {
   db: {
     select: typeof import("@/lib/db").db.select;
@@ -28,24 +33,40 @@ async function findExistingSessionEntry(input: {
   exerciseId: string;
   setNumber: number;
   dayExerciseId: string | null;
-}) {
+}): Promise<ExistingSessionEntryLookupResult> {
   const baseFilter = and(
     eq(sessionEntries.workoutSessionId, input.workoutSessionId),
     eq(sessionEntries.setNumber, input.setNumber),
   );
 
-  if (input.dayExerciseId) {
-    const existingSlotEntry = await input.db
+  if (!input.dayExerciseId) {
+    const matchingEntries = await input.db
       .select()
       .from(sessionEntries)
-      .where(
-        and(baseFilter, eq(sessionEntries.dayExerciseId, input.dayExerciseId)),
-      )
-      .limit(1);
+      .where(and(baseFilter, eq(sessionEntries.exerciseId, input.exerciseId)))
+      .limit(2);
 
-    if (existingSlotEntry[0]) {
-      return existingSlotEntry[0];
+    if (matchingEntries.length === 1) {
+      return { status: "found", entry: matchingEntries[0] };
     }
+
+    if (matchingEntries.length > 1) {
+      return { status: "ambiguous" };
+    }
+
+    return { status: "missing" };
+  }
+
+  const existingSlotEntry = await input.db
+    .select()
+    .from(sessionEntries)
+    .where(
+      and(baseFilter, eq(sessionEntries.dayExerciseId, input.dayExerciseId)),
+    )
+    .limit(1);
+
+  if (existingSlotEntry[0]) {
+    return { status: "found", entry: existingSlotEntry[0] };
   }
 
   const legacyEntry = await input.db
@@ -60,7 +81,11 @@ async function findExistingSessionEntry(input: {
     )
     .limit(1);
 
-  return legacyEntry[0] ?? null;
+  if (legacyEntry[0]) {
+    return { status: "found", entry: legacyEntry[0] };
+  }
+
+  return { status: "missing" };
 }
 
 export async function POST(request: Request) {
@@ -94,6 +119,13 @@ export async function POST(request: Request) {
     dayExerciseId: body.dayExerciseId ?? null,
   });
 
+  if (existingEntry.status === "ambiguous") {
+    return NextResponse.json(
+      { error: "Ambiguous session entry identifiers" },
+      { status: 409 },
+    );
+  }
+
   const data = {
     workoutSessionId: body.workoutSessionId,
     exerciseId: body.exerciseId,
@@ -113,11 +145,11 @@ export async function POST(request: Request) {
     dayExerciseId: body.dayExerciseId ?? null,
   };
 
-  if (existingEntry) {
+  if (existingEntry.status === "found") {
     const [updatedEntry] = await db
       .update(sessionEntries)
       .set(data)
-      .where(eq(sessionEntries.id, existingEntry.id))
+      .where(eq(sessionEntries.id, existingEntry.entry.id))
       .returning();
 
     return NextResponse.json({ entry: updatedEntry });

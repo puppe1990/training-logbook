@@ -334,11 +334,10 @@ describe("session entries route", () => {
     expect(whereClauses).toHaveLength(2);
     expect(whereClauses[0]).toEqual(
       expect.objectContaining({
-        columns: expect.arrayContaining(["exercise_id", "day_exercise_id"]),
+        columns: expect.arrayContaining(["exercise_id"]),
         values: expect.arrayContaining(["exercise-1", 1, "session-1"]),
       }),
     );
-    expect(whereClauses[0]?.values).not.toContain("de-1");
     expect(updateSet).toHaveBeenCalledWith({
       workoutSessionId: "session-1",
       exerciseId: "exercise-1",
@@ -351,6 +350,141 @@ describe("session entries route", () => {
       isCompleted: true,
       dayExerciseId: null,
     });
+  });
+
+  it("updates an existing explicit slot entry when a repeated post omits dayExerciseId", async () => {
+    getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
+
+    const whereClauses: Array<ReturnType<typeof getSqlColumnsAndValues>> = [];
+    const selectLimit = vi.fn().mockResolvedValueOnce([
+      {
+        id: "entry-1",
+        workoutSessionId: "session-1",
+        exerciseId: "exercise-1",
+        setNumber: 1,
+        dayExerciseId: "de-1",
+      },
+    ]);
+    const selectWhere = vi.fn((expression: unknown) => {
+      whereClauses.push(getSqlColumnsAndValues(expression));
+
+      return { limit: selectLimit };
+    });
+    const selectFrom = vi.fn(() => ({ where: selectWhere }));
+    db.select.mockReturnValue({ from: selectFrom });
+
+    const updatedEntry = {
+      id: "entry-1",
+      workoutSessionId: "session-1",
+      exerciseId: "exercise-1",
+      setNumber: 1,
+      dayExerciseId: null,
+      performedReps: 10,
+      weightValue: 55,
+      targetRepsMin: null,
+      targetRepsMax: null,
+      note: null,
+      isCompleted: true,
+    };
+
+    const updateReturning = vi.fn().mockResolvedValue([updatedEntry]);
+    const updateWhere = vi.fn(() => ({ returning: updateReturning }));
+    const updateSet = vi.fn(() => ({ where: updateWhere }));
+    db.update.mockReturnValue({ set: updateSet });
+
+    const insertValues = vi.fn();
+    db.insert.mockReturnValue({ values: insertValues });
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          setNumber: "1",
+          performedReps: "10",
+          weightValue: "55",
+          isCompleted: true,
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      entry: updatedEntry,
+    });
+    expect(db.insert).not.toHaveBeenCalled();
+    expect(db.update).toHaveBeenCalledTimes(1);
+    expect(whereClauses).toHaveLength(1);
+    expect(whereClauses[0]).toEqual(
+      expect.objectContaining({
+        columns: expect.arrayContaining(["exercise_id"]),
+        values: expect.arrayContaining(["session-1", "exercise-1", 1]),
+      }),
+    );
+    expect(updateSet).toHaveBeenCalledWith({
+      workoutSessionId: "session-1",
+      exerciseId: "exercise-1",
+      setNumber: 1,
+      performedReps: 10,
+      weightValue: 55,
+      targetRepsMin: null,
+      targetRepsMax: null,
+      note: null,
+      isCompleted: true,
+      dayExerciseId: null,
+    });
+  });
+
+  it("returns 409 when an omitted dayExerciseId matches multiple explicit slots", async () => {
+    getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
+
+    const selectLimit = vi.fn().mockResolvedValueOnce([
+      {
+        id: "entry-1",
+        workoutSessionId: "session-1",
+        exerciseId: "exercise-1",
+        setNumber: 1,
+        dayExerciseId: "de-1",
+      },
+      {
+        id: "entry-2",
+        workoutSessionId: "session-1",
+        exerciseId: "exercise-1",
+        setNumber: 1,
+        dayExerciseId: "de-2",
+      },
+    ]);
+    const selectWhere = vi.fn(() => ({ limit: selectLimit }));
+    const selectFrom = vi.fn(() => ({ where: selectWhere }));
+    db.select.mockReturnValue({ from: selectFrom });
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          setNumber: "1",
+          performedReps: "10",
+          weightValue: "55",
+          isCompleted: true,
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: "Ambiguous session entry identifiers",
+    });
+    expect(db.insert).not.toHaveBeenCalled();
+    expect(db.update).not.toHaveBeenCalled();
   });
 
   it("creates separate entries for duplicate exercise slots with different dayExerciseId values", async () => {
