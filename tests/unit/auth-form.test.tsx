@@ -68,6 +68,30 @@ describe("AuthForm", () => {
     );
   });
 
+  it("requires signup passwords to match the auth minimum length", () => {
+    render(<AuthForm mode="signup" />);
+
+    expect(screen.getByLabelText("Password")).toHaveAttribute("minLength", "8");
+    expect(screen.getByText("Use at least 8 characters.")).toBeVisible();
+  });
+
+  it("toggles password visibility without submitting the form", () => {
+    render(<AuthForm mode="login" />);
+
+    const passwordInput = screen.getByLabelText("Password");
+
+    expect(passwordInput).toHaveAttribute("type", "password");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+
+    expect(passwordInput).toHaveAttribute("type", "text");
+    expect(signInEmail).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide password" }));
+
+    expect(passwordInput).toHaveAttribute("type", "password");
+  });
+
   it("submits login credentials and routes to today on success", async () => {
     signInEmail.mockResolvedValue({
       data: { user: { id: "user-1" } },

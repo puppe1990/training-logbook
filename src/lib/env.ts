@@ -2,7 +2,7 @@ export type RawEnv = Record<string, string | undefined>;
 
 export type AppEnv = {
   tursoUrl: string;
-  tursoAuthToken: string;
+  tursoAuthToken?: string;
   authSecret: string;
   authUrl: string;
 };
@@ -20,8 +20,8 @@ function requireValue(value: string | undefined): string {
 }
 
 export function readDatabaseEnv(raw: RawEnv = process.env): DatabaseEnv {
-  const tursoUrl = requireValue(raw.TURSO_DATABASE_URL);
-  const tursoAuthToken = requireValue(raw.TURSO_AUTH_TOKEN);
+  const tursoUrl = raw.TURSO_DATABASE_URL ?? "file:local.db";
+  const tursoAuthToken = raw.TURSO_AUTH_TOKEN;
 
   return {
     tursoUrl,

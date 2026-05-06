@@ -72,6 +72,25 @@ function getSqlColumnsAndValues(expression: unknown) {
   };
 }
 
+function buildSelectChain(rows: unknown[], joinCount = 0) {
+  const limit = vi.fn().mockResolvedValue(rows);
+  const where = vi.fn(() => ({ limit }));
+  const query: {
+    from: ReturnType<typeof vi.fn>;
+    where?: ReturnType<typeof vi.fn>;
+    innerJoin?: ReturnType<typeof vi.fn>;
+  } = {
+    from: vi.fn(() => query),
+    where,
+  };
+
+  if (joinCount > 0) {
+    query.innerJoin = vi.fn(() => query);
+  }
+
+  return query;
+}
+
 describe("session entries route", () => {
   beforeEach(() => {
     db.select.mockReset();
@@ -90,6 +109,277 @@ describe("session entries route", () => {
     );
 
     expect(response.status).toBe(401);
+  });
+
+  it("returns 400 when setNumber is invalid", async () => {
+    getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          dayExerciseId: "de-1",
+          setNumber: "zero",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Invalid session entry payload",
+    });
+  });
+
+  it("returns 400 when optional numeric fields are invalid", async () => {
+    getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          dayExerciseId: "de-1",
+          setNumber: "1",
+          performedReps: "eight",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Invalid session entry payload",
+    });
+  });
+
+  it("returns 400 when the workout session does not belong to the signed-in user", async () => {
+    getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
+    db.select.mockReturnValueOnce(buildSelectChain([]));
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workoutSessionId: "session-foreign",
+          exerciseId: "exercise-1",
+          setNumber: "1",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Missing session entry identifiers",
+    });
+  });
+
+  it("returns 400 when dayExerciseId and exerciseId do not match", async () => {
+    getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
+    db.select.mockReturnValueOnce(
+      buildSelectChain(
+        [{ exerciseId: "exercise-2", workoutDayId: "day-1" }],
+        2,
+      ),
+    );
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          dayExerciseId: "de-1",
+          setNumber: "1",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Missing session entry identifiers",
+    });
+  });
+
+  it("creates a workout session on first save when session id is missing", async () => {
+    getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
+
+    const dayExerciseLookup = buildSelectChain(
+      [{ exerciseId: "exercise-1", workoutDayId: "day-1" }],
+      2,
+    );
+    const sessionLookup = buildSelectChain([]);
+    const explicitEntryLookup = buildSelectChain([]);
+    const legacyEntryLookup = buildSelectChain([]);
+
+    db.select
+      .mockReturnValueOnce(dayExerciseLookup)
+      .mockReturnValueOnce(sessionLookup)
+      .mockReturnValueOnce(explicitEntryLookup)
+      .mockReturnValueOnce(legacyEntryLookup);
+
+    const insertReturning = vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          id: "session-1",
+          userId: "user-1",
+          workoutDayId: "day-1",
+          performedOn: "2026-05-03",
+          sessionNote: null,
+          status: "in_progress",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "entry-1",
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          dayExerciseId: "de-1",
+          setNumber: 1,
+          performedReps: 8,
+          weightValue: 70,
+          targetRepsMin: 6,
+          targetRepsMax: 10,
+          note: null,
+          isCompleted: true,
+        },
+      ]);
+    const insertValues = vi.fn(() => ({ returning: insertReturning }));
+    db.insert.mockReturnValue({ values: insertValues });
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          exerciseId: "exercise-1",
+          dayExerciseId: "de-1",
+          setNumber: "1",
+          performedReps: "8",
+          weightValue: "70",
+          targetRepsMin: 6,
+          targetRepsMax: 10,
+          isCompleted: true,
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      entry: {
+        id: "entry-1",
+        workoutSessionId: "session-1",
+        exerciseId: "exercise-1",
+        dayExerciseId: "de-1",
+        setNumber: 1,
+        performedReps: 8,
+        weightValue: 70,
+        targetRepsMin: 6,
+        targetRepsMax: 10,
+        note: null,
+        isCompleted: true,
+      },
+    });
+    expect(db.insert).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns 400 when setNumber is not a positive integer", async () => {
+    getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          setNumber: "0",
+          performedReps: "10",
+          weightValue: "55",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Invalid session entry payload",
+    });
+    expect(db.select).not.toHaveBeenCalled();
+    expect(db.insert).not.toHaveBeenCalled();
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it("accepts blank optional numeric fields as null", async () => {
+    getSessionFromHeaders.mockResolvedValue({ user: { id: "user-1" } });
+
+    const selectLimit = vi.fn().mockResolvedValue([]);
+    const selectWhere = vi.fn(() => ({ limit: selectLimit }));
+    const selectFrom = vi.fn(() => ({ where: selectWhere }));
+    db.select
+      .mockReturnValueOnce(
+        buildSelectChain([{ id: "session-1", workoutDayId: "day-1" }]),
+      )
+      .mockReturnValue({ from: selectFrom });
+
+    const createdEntry = {
+      id: "entry-1",
+      workoutSessionId: "session-1",
+      exerciseId: "exercise-1",
+      setNumber: 1,
+      dayExerciseId: null,
+      performedReps: null,
+      weightValue: null,
+      targetRepsMin: null,
+      targetRepsMax: null,
+      note: null,
+      isCompleted: false,
+    };
+
+    const insertReturning = vi.fn().mockResolvedValue([createdEntry]);
+    const insertValues = vi.fn(() => ({ returning: insertReturning }));
+    db.insert.mockReturnValue({ values: insertValues });
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/session-entries", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workoutSessionId: "session-1",
+          exerciseId: "exercise-1",
+          setNumber: "1",
+          performedReps: "",
+          weightValue: "",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        performedReps: null,
+        weightValue: null,
+      }),
+    );
   });
 
   it("updates an existing entry when the same session exercise set is posted twice", async () => {
@@ -115,7 +405,28 @@ describe("session entries route", () => {
       return { limit: selectLimit };
     });
     const selectFrom = vi.fn(() => ({ where: selectWhere }));
-    db.select.mockReturnValue({ from: selectFrom });
+    db.select
+      .mockReturnValueOnce(
+        buildSelectChain(
+          [{ exerciseId: "exercise-1", workoutDayId: "day-1" }],
+          2,
+        ),
+      )
+      .mockReturnValueOnce(
+        buildSelectChain([{ id: "session-1", workoutDayId: "day-1" }]),
+      )
+      .mockReturnValueOnce({ from: selectFrom })
+      .mockReturnValueOnce({ from: selectFrom })
+      .mockReturnValueOnce(
+        buildSelectChain(
+          [{ exerciseId: "exercise-1", workoutDayId: "day-1" }],
+          2,
+        ),
+      )
+      .mockReturnValueOnce(
+        buildSelectChain([{ id: "session-1", workoutDayId: "day-1" }]),
+      )
+      .mockReturnValueOnce({ from: selectFrom });
 
     const createdEntry = {
       id: "entry-1",
@@ -135,7 +446,7 @@ describe("session entries route", () => {
       workoutSessionId: "session-1",
       exerciseId: "exercise-1",
       setNumber: 1,
-      dayExerciseId: "de-1",
+      dayExerciseId: null,
       performedReps: 10,
       weightValue: 55,
       targetRepsMin: null,
@@ -250,7 +561,15 @@ describe("session entries route", () => {
       return { limit: selectLimit };
     });
     const selectFrom = vi.fn(() => ({ where: selectWhere }));
-    db.select.mockReturnValue({ from: selectFrom });
+    db.select
+      .mockReturnValueOnce(
+        buildSelectChain([{ id: "session-1", workoutDayId: "day-1" }]),
+      )
+      .mockReturnValueOnce({ from: selectFrom })
+      .mockReturnValueOnce(
+        buildSelectChain([{ id: "session-1", workoutDayId: "day-1" }]),
+      )
+      .mockReturnValueOnce({ from: selectFrom });
 
     const createdEntry = {
       id: "entry-1",
@@ -270,7 +589,7 @@ describe("session entries route", () => {
       workoutSessionId: "session-1",
       exerciseId: "exercise-1",
       setNumber: 1,
-      dayExerciseId: null,
+      dayExerciseId: "de-1",
       performedReps: 10,
       weightValue: 55,
       targetRepsMin: null,
@@ -371,14 +690,18 @@ describe("session entries route", () => {
       return { limit: selectLimit };
     });
     const selectFrom = vi.fn(() => ({ where: selectWhere }));
-    db.select.mockReturnValue({ from: selectFrom });
+    db.select
+      .mockReturnValueOnce(
+        buildSelectChain([{ id: "session-1", workoutDayId: "day-1" }]),
+      )
+      .mockReturnValueOnce({ from: selectFrom });
 
     const updatedEntry = {
       id: "entry-1",
       workoutSessionId: "session-1",
       exerciseId: "exercise-1",
       setNumber: 1,
-      dayExerciseId: null,
+      dayExerciseId: "de-1",
       performedReps: 10,
       weightValue: 55,
       targetRepsMin: null,
@@ -435,7 +758,7 @@ describe("session entries route", () => {
       targetRepsMax: null,
       note: null,
       isCompleted: true,
-      dayExerciseId: null,
+      dayExerciseId: "de-1",
     });
   });
 
@@ -460,7 +783,11 @@ describe("session entries route", () => {
     ]);
     const selectWhere = vi.fn(() => ({ limit: selectLimit }));
     const selectFrom = vi.fn(() => ({ where: selectWhere }));
-    db.select.mockReturnValue({ from: selectFrom });
+    db.select
+      .mockReturnValueOnce(
+        buildSelectChain([{ id: "session-1", workoutDayId: "day-1" }]),
+      )
+      .mockReturnValueOnce({ from: selectFrom });
 
     const response = await POST(
       new Request("http://localhost:3000/api/session-entries", {
@@ -554,7 +881,29 @@ describe("session entries route", () => {
       };
     });
     const selectFrom = vi.fn(() => ({ where: selectWhere }));
-    db.select.mockReturnValue({ from: selectFrom });
+    db.select
+      .mockReturnValueOnce(
+        buildSelectChain(
+          [{ exerciseId: "exercise-1", workoutDayId: "day-1" }],
+          2,
+        ),
+      )
+      .mockReturnValueOnce(
+        buildSelectChain([{ id: "session-1", workoutDayId: "day-1" }]),
+      )
+      .mockReturnValueOnce({ from: selectFrom })
+      .mockReturnValueOnce({ from: selectFrom })
+      .mockReturnValueOnce(
+        buildSelectChain(
+          [{ exerciseId: "exercise-1", workoutDayId: "day-1" }],
+          2,
+        ),
+      )
+      .mockReturnValueOnce(
+        buildSelectChain([{ id: "session-1", workoutDayId: "day-1" }]),
+      )
+      .mockReturnValueOnce({ from: selectFrom })
+      .mockReturnValueOnce({ from: selectFrom });
 
     const updateReturning = vi.fn(async () => {
       const updatedEntry = storedEntries.at(-1);

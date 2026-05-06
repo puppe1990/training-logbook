@@ -1,3 +1,14 @@
+import { randomUUID } from "node:crypto";
+
+import { and, eq } from "drizzle-orm";
+
+import {
+  dayExercises,
+  exercises,
+  workoutDays,
+  workoutPlans,
+} from "@/lib/db/schema";
+
 export const starterPlan = {
   name: "Ficha inicial",
   days: [
@@ -217,6 +228,80 @@ export const starterPlan = {
   ],
 };
 
-export async function seedStarterPlan() {
-  return { planId: "starter-plan" };
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export async function seedStarterPlan(userId: string) {
+  const { db } = await import("@/lib/db");
+  const [existingPlan] = await db
+    .select({
+      id: workoutPlans.id,
+      isActive: workoutPlans.isActive,
+    })
+    .from(workoutPlans)
+    .where(
+      and(
+        eq(workoutPlans.userId, userId),
+        eq(workoutPlans.name, starterPlan.name),
+      ),
+    )
+    .limit(1);
+
+  if (existingPlan) {
+    return { planId: existingPlan.id };
+  }
+
+  const planId = randomUUID();
+
+  await db.insert(workoutPlans).values({
+    id: planId,
+    userId,
+    name: starterPlan.name,
+    isActive: true,
+  });
+
+  for (const [dayIndex, day] of starterPlan.days.entries()) {
+    const workoutDayId = randomUUID();
+
+    await db.insert(workoutDays).values({
+      id: workoutDayId,
+      planId,
+      name: day.name,
+      weekday: day.weekday,
+      sortOrder: dayIndex + 1,
+    });
+
+    for (const [exerciseIndex, exercise] of day.exercises.entries()) {
+      const exerciseId = randomUUID();
+
+      await db.insert(exercises).values({
+        id: exerciseId,
+        userId,
+        name: exercise.name,
+        slug: `${slugify(exercise.name)}-${slugify(userId)}-${day.weekday}-${exerciseIndex + 1}`,
+        muscleGroup: "General",
+        movementPattern: null,
+        notes: null,
+      });
+
+      await db.insert(dayExercises).values({
+        id: randomUUID(),
+        workoutDayId,
+        exerciseId,
+        sortOrder: exerciseIndex + 1,
+        prescribedSets: exercise.sets,
+        repMin: exercise.repMin,
+        repMax: exercise.repMax,
+        instruction: exercise.instruction,
+      });
+    }
+  }
+
+  return { planId };
 }

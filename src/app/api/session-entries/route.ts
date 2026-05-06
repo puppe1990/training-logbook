@@ -4,7 +4,13 @@ import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getSessionFromHeaders } from "@/lib/session";
-import { sessionEntries } from "@/lib/db/schema";
+import {
+  dayExercises,
+  sessionEntries,
+  workoutDays,
+  workoutPlans,
+  workoutSessions,
+} from "@/lib/db/schema";
 import { normalizeEntryPayload } from "@/lib/workouts/save-session-entry";
 
 type SessionEntryRequestBody = {
@@ -21,7 +27,7 @@ type SessionEntryRequestBody = {
 };
 
 type ExistingSessionEntryLookupResult =
-  | { status: "found"; entry: { id: string } }
+  | { status: "found"; entry: { id: string; dayExerciseId: string | null } }
   | { status: "missing" }
   | { status: "ambiguous" };
 
@@ -88,6 +94,111 @@ async function findExistingSessionEntry(input: {
   return { status: "missing" };
 }
 
+function formatDateString(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+async function resolveWorkoutSessionId(input: {
+  db: typeof import("@/lib/db").db;
+  userId: string;
+  workoutSessionId?: string;
+  workoutDayId?: string;
+}) {
+  if (input.workoutSessionId) {
+    const [existingSession] = await input.db
+      .select({
+        id: workoutSessions.id,
+        workoutDayId: workoutSessions.workoutDayId,
+      })
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.id, input.workoutSessionId),
+          eq(workoutSessions.userId, input.userId),
+        ),
+      )
+      .limit(1);
+
+    if (!existingSession) {
+      throw new Error("Missing session entry identifiers");
+    }
+
+    if (
+      input.workoutDayId &&
+      existingSession.workoutDayId &&
+      existingSession.workoutDayId !== input.workoutDayId
+    ) {
+      throw new Error("Missing session entry identifiers");
+    }
+
+    return existingSession.id;
+  }
+
+  if (!input.workoutDayId) {
+    throw new Error("Missing session entry identifiers");
+  }
+
+  const performedOn = formatDateString(new Date());
+  const [existingSession] = await input.db
+    .select({
+      id: workoutSessions.id,
+    })
+    .from(workoutSessions)
+    .where(
+      and(
+        eq(workoutSessions.userId, input.userId),
+        eq(workoutSessions.workoutDayId, input.workoutDayId),
+        eq(workoutSessions.performedOn, performedOn),
+      ),
+    )
+    .limit(1);
+
+  if (existingSession) {
+    return existingSession.id;
+  }
+
+  const [createdSession] = await input.db
+    .insert(workoutSessions)
+    .values({
+      id: randomUUID(),
+      userId: input.userId,
+      workoutDayId: input.workoutDayId,
+      performedOn,
+    })
+    .returning();
+
+  return createdSession.id;
+}
+
+async function resolveOwnedDayExercise(input: {
+  db: typeof import("@/lib/db").db;
+  userId: string;
+  dayExerciseId: string;
+}) {
+  const [dayExercise] = await input.db
+    .select({
+      id: dayExercises.id,
+      exerciseId: dayExercises.exerciseId,
+      workoutDayId: dayExercises.workoutDayId,
+    })
+    .from(dayExercises)
+    .innerJoin(workoutDays, eq(workoutDays.id, dayExercises.workoutDayId))
+    .innerJoin(workoutPlans, eq(workoutPlans.id, workoutDays.planId))
+    .where(
+      and(
+        eq(dayExercises.id, input.dayExerciseId),
+        eq(workoutPlans.userId, input.userId),
+      ),
+    )
+    .limit(1);
+
+  return dayExercise ?? null;
+}
+
 export async function POST(request: Request) {
   const session = await getSessionFromHeaders(request.headers);
 
@@ -96,24 +207,90 @@ export async function POST(request: Request) {
   }
 
   const { db } = await import("@/lib/db");
-  const body = (await request.json()) as SessionEntryRequestBody;
+  let body: SessionEntryRequestBody;
 
-  if (!body.workoutSessionId || !body.exerciseId || !body.setNumber) {
+  try {
+    const bodyText = await request.text();
+    body = bodyText ? (JSON.parse(bodyText) as SessionEntryRequestBody) : {};
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid session entry payload" },
+      { status: 400 },
+    );
+  }
+
+  if (!body.exerciseId || !body.setNumber) {
     return NextResponse.json(
       { error: "Missing session entry identifiers" },
       { status: 400 },
     );
   }
 
-  const normalized = normalizeEntryPayload({
-    setNumber: body.setNumber,
-    performedReps: body.performedReps ?? "",
-    weightValue: body.weightValue ?? "",
-  });
+  let normalized: ReturnType<typeof normalizeEntryPayload>;
+
+  try {
+    normalized = normalizeEntryPayload({
+      setNumber: body.setNumber,
+      performedReps: body.performedReps ?? "",
+      weightValue: body.weightValue ?? "",
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid session entry payload" },
+      { status: 400 },
+    );
+  }
+
+  if (!Number.isInteger(normalized.setNumber) || normalized.setNumber < 1) {
+    return NextResponse.json(
+      { error: "Invalid session entry payload" },
+      { status: 400 },
+    );
+  }
+
+  let workoutSessionId: string;
+  const resolvedDayExercise = body.dayExerciseId
+    ? await resolveOwnedDayExercise({
+        db,
+        userId: session.user.id,
+        dayExerciseId: body.dayExerciseId,
+      })
+    : null;
+
+  if (body.dayExerciseId && !resolvedDayExercise) {
+    return NextResponse.json(
+      { error: "Missing session entry identifiers" },
+      { status: 400 },
+    );
+  }
+
+  if (
+    resolvedDayExercise &&
+    resolvedDayExercise.exerciseId !== body.exerciseId
+  ) {
+    return NextResponse.json(
+      { error: "Missing session entry identifiers" },
+      { status: 400 },
+    );
+  }
+
+  try {
+    workoutSessionId = await resolveWorkoutSessionId({
+      db,
+      userId: session.user.id,
+      workoutSessionId: body.workoutSessionId,
+      workoutDayId: resolvedDayExercise?.workoutDayId,
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "Missing session entry identifiers" },
+      { status: 400 },
+    );
+  }
 
   const existingEntry = await findExistingSessionEntry({
     db,
-    workoutSessionId: body.workoutSessionId,
+    workoutSessionId,
     exerciseId: body.exerciseId,
     setNumber: normalized.setNumber,
     dayExerciseId: body.dayExerciseId ?? null,
@@ -127,7 +304,7 @@ export async function POST(request: Request) {
   }
 
   const data = {
-    workoutSessionId: body.workoutSessionId,
+    workoutSessionId,
     exerciseId: body.exerciseId,
     setNumber: normalized.setNumber,
     performedReps: normalized.performedReps,
@@ -142,7 +319,11 @@ export async function POST(request: Request) {
         : Number(body.targetRepsMax),
     note: body.note ?? null,
     isCompleted: body.isCompleted ?? false,
-    dayExerciseId: body.dayExerciseId ?? null,
+    dayExerciseId:
+      body.dayExerciseId ??
+      (existingEntry.status === "found"
+        ? existingEntry.entry.dayExerciseId
+        : null),
   };
 
   if (existingEntry.status === "found") {

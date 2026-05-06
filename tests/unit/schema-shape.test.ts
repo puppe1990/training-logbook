@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 
 import {
+  account,
   users,
+  session,
+  verification,
   workoutPlans,
   workoutDays,
   exercises,
@@ -15,6 +18,9 @@ import {
 describe("schema", () => {
   it("exports the core tables with their required columns", () => {
     expect(getTableConfig(users).name).toBe("users");
+    expect(getTableConfig(account).name).toBe("account");
+    expect(getTableConfig(session).name).toBe("session");
+    expect(getTableConfig(verification).name).toBe("verification");
     expect(getTableConfig(workoutPlans).name).toBe("workout_plans");
     expect(getTableConfig(workoutDays).name).toBe("workout_days");
     expect(getTableConfig(exercises).name).toBe("exercises");
@@ -35,6 +41,18 @@ describe("schema", () => {
       "rep_max",
       "instruction",
     ]);
+
+    expect(getTableConfig(users).columns.map((column) => column.name)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "name",
+        "email",
+        "emailVerified",
+        "image",
+        "createdAt",
+        "updatedAt",
+      ]),
+    );
   });
 
   it("defines integrity constraints and indexes for workout queries", () => {

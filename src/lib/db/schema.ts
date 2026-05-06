@@ -7,7 +7,7 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
-const timestamps = {
+const appTimestamps = {
   createdAt: text("created_at")
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),
@@ -16,12 +16,65 @@ const timestamps = {
     .default(sql`CURRENT_TIMESTAMP`),
 };
 
+const authTimestamps = {
+  createdAt: integer("createdAt", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updatedAt", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+};
+
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
-  authProviderUserId: text("auth_provider_user_id").notNull().unique(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  ...timestamps,
+  emailVerified: integer("emailVerified", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  image: text("image"),
+  ...authTimestamps,
+});
+
+export const account = sqliteTable("account", {
+  id: text("id").primaryKey(),
+  accountId: text("accountId").notNull(),
+  providerId: text("providerId").notNull(),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  accessToken: text("accessToken"),
+  refreshToken: text("refreshToken"),
+  idToken: text("idToken"),
+  accessTokenExpiresAt: integer("accessTokenExpiresAt", {
+    mode: "timestamp_ms",
+  }),
+  refreshTokenExpiresAt: integer("refreshTokenExpiresAt", {
+    mode: "timestamp_ms",
+  }),
+  scope: text("scope"),
+  password: text("password"),
+  ...authTimestamps,
+});
+
+export const session = sqliteTable("session", {
+  id: text("id").primaryKey(),
+  token: text("token").notNull().unique(),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: integer("expiresAt", { mode: "timestamp_ms" }).notNull(),
+  ipAddress: text("ipAddress"),
+  userAgent: text("userAgent"),
+  ...authTimestamps,
+});
+
+export const verification = sqliteTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: integer("expiresAt", { mode: "timestamp_ms" }).notNull(),
+  ...authTimestamps,
 });
 
 export const workoutPlans = sqliteTable(
@@ -33,7 +86,7 @@ export const workoutPlans = sqliteTable(
       .references(() => users.id),
     name: text("name").notNull(),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-    ...timestamps,
+    ...appTimestamps,
   },
   (table) => [index("workout_plans_user_id_idx").on(table.userId)],
 );
@@ -48,7 +101,7 @@ export const workoutDays = sqliteTable(
     name: text("name").notNull(),
     weekday: integer("weekday").notNull(),
     sortOrder: integer("sort_order").notNull(),
-    ...timestamps,
+    ...appTimestamps,
   },
   (table) => [
     index("workout_days_plan_id_idx").on(table.planId),
@@ -72,7 +125,7 @@ export const exercises = sqliteTable("exercises", {
   muscleGroup: text("muscle_group").notNull(),
   movementPattern: text("movement_pattern"),
   notes: text("notes"),
-  ...timestamps,
+  ...appTimestamps,
 });
 
 export const exerciseImages = sqliteTable(
@@ -140,7 +193,7 @@ export const workoutSessions = sqliteTable(
     performedOn: text("performed_on").notNull(),
     sessionNote: text("session_note"),
     status: text("status").notNull().default("in_progress"),
-    ...timestamps,
+    ...appTimestamps,
   },
   (table) => [
     index("workout_sessions_user_id_idx").on(table.userId),
