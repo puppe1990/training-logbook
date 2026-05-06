@@ -1,0 +1,10 @@
+.next
+.husky/_/
+coverage
+node_modules
+playwright-report
+test-results
+pnpm-lock.yaml
+package-lock.json
+local.db
+tsconfig.tsbuildinfo

@@ -3,11 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.33.2",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "prepare": "husky",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
@@ -35,8 +40,11 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.24.0",
     "eslint-config-next": "^16.0.0",
+    "husky": "^9.1.7",
     "jsdom": "^26.1.0",
+    "lint-staged": "^16.4.0",
     "postcss": "^8.5.13",
+    "prettier": "^3.8.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
     "vitest": "^3.2.4"
@@ -46,5 +54,13 @@
     "@esbuild-kit/core-utils": {
       "esbuild": "^0.25.12"
     }
+  },
+  "lint-staged": {
+    "*.{css,js,json,jsx,md,mjs,ts,tsx,yaml,yml}": [
+      "prettier --write"
+    ],
+    "*.{js,jsx,mjs,ts,tsx}": [
+      "eslint --fix"
+    ]
   }
 }

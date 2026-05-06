@@ -90,6 +90,7 @@
 ## Task 1: Bootstrap Next.js App
 
 **Files:**
+
 - Create: `package.json`
 - Create: `tsconfig.json`
 - Create: `next.config.ts`
@@ -239,6 +240,7 @@ git commit -m "chore: bootstrap next training app"
 ## Task 2: Add Environment and Database Foundations
 
 **Files:**
+
 - Create: `.env.example`
 - Create: `drizzle.config.ts`
 - Create: `src/lib/env.ts`
@@ -350,6 +352,7 @@ git commit -m "chore: add turso environment foundation"
 ## Task 3: Define Schema and Migrations
 
 **Files:**
+
 - Create: `src/lib/db/schema.ts`
 - Create: `drizzle/0000_initial.sql`
 - Test: `tests/unit/schema-shape.test.ts`
@@ -377,7 +380,9 @@ describe("schema", () => {
     expect(workoutDays[Symbol.for("drizzle:Name")]).toBe("workout_days");
     expect(exercises[Symbol.for("drizzle:Name")]).toBe("exercises");
     expect(dayExercises[Symbol.for("drizzle:Name")]).toBe("day_exercises");
-    expect(workoutSessions[Symbol.for("drizzle:Name")]).toBe("workout_sessions");
+    expect(workoutSessions[Symbol.for("drizzle:Name")]).toBe(
+      "workout_sessions",
+    );
     expect(sessionEntries[Symbol.for("drizzle:Name")]).toBe("session_entries");
     expect(exerciseImages[Symbol.for("drizzle:Name")]).toBe("exercise_images");
   });
@@ -415,7 +420,9 @@ export const users = sqliteTable("users", {
 
 export const workoutPlans = sqliteTable("workout_plans", {
   id: text("id").primaryKey(),
-  userId: text("user_id").notNull().references(() => users.id),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
   name: text("name").notNull(),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   ...timestamps,
@@ -423,7 +430,9 @@ export const workoutPlans = sqliteTable("workout_plans", {
 
 export const workoutDays = sqliteTable("workout_days", {
   id: text("id").primaryKey(),
-  planId: text("plan_id").notNull().references(() => workoutPlans.id),
+  planId: text("plan_id")
+    .notNull()
+    .references(() => workoutPlans.id),
   name: text("name").notNull(),
   weekday: integer("weekday").notNull(),
   sortOrder: integer("sort_order").notNull(),
@@ -443,7 +452,9 @@ export const exercises = sqliteTable("exercises", {
 
 export const exerciseImages = sqliteTable("exercise_images", {
   id: text("id").primaryKey(),
-  exerciseId: text("exercise_id").notNull().references(() => exercises.id),
+  exerciseId: text("exercise_id")
+    .notNull()
+    .references(() => exercises.id),
   imageUrl: text("image_url").notNull(),
   sourceUrl: text("source_url"),
   sourceName: text("source_name"),
@@ -455,8 +466,12 @@ export const exerciseImages = sqliteTable("exercise_images", {
 
 export const dayExercises = sqliteTable("day_exercises", {
   id: text("id").primaryKey(),
-  workoutDayId: text("workout_day_id").notNull().references(() => workoutDays.id),
-  exerciseId: text("exercise_id").notNull().references(() => exercises.id),
+  workoutDayId: text("workout_day_id")
+    .notNull()
+    .references(() => workoutDays.id),
+  exerciseId: text("exercise_id")
+    .notNull()
+    .references(() => exercises.id),
   sortOrder: integer("sort_order").notNull(),
   prescribedSets: integer("prescribed_sets").notNull(),
   repMin: integer("rep_min").notNull(),
@@ -466,7 +481,9 @@ export const dayExercises = sqliteTable("day_exercises", {
 
 export const workoutSessions = sqliteTable("workout_sessions", {
   id: text("id").primaryKey(),
-  userId: text("user_id").notNull().references(() => users.id),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
   workoutDayId: text("workout_day_id").references(() => workoutDays.id),
   performedOn: text("performed_on").notNull(),
   sessionNote: text("session_note"),
@@ -476,16 +493,22 @@ export const workoutSessions = sqliteTable("workout_sessions", {
 
 export const sessionEntries = sqliteTable("session_entries", {
   id: text("id").primaryKey(),
-  workoutSessionId: text("workout_session_id").notNull().references(() => workoutSessions.id),
+  workoutSessionId: text("workout_session_id")
+    .notNull()
+    .references(() => workoutSessions.id),
   dayExerciseId: text("day_exercise_id").references(() => dayExercises.id),
-  exerciseId: text("exercise_id").notNull().references(() => exercises.id),
+  exerciseId: text("exercise_id")
+    .notNull()
+    .references(() => exercises.id),
   setNumber: integer("set_number").notNull(),
   targetRepsMin: integer("target_reps_min"),
   targetRepsMax: integer("target_reps_max"),
   performedReps: integer("performed_reps"),
   weightValue: integer("weight_value"),
   note: text("note"),
-  isCompleted: integer("is_completed", { mode: "boolean" }).notNull().default(false),
+  isCompleted: integer("is_completed", { mode: "boolean" })
+    .notNull()
+    .default(false),
 });
 ```
 
@@ -507,6 +530,7 @@ git commit -m "feat: add workout schema"
 ## Task 4: Add Authentication
 
 **Files:**
+
 - Create: `src/lib/auth.ts`
 - Create: `src/lib/session.ts`
 - Create: `src/app/api/auth/[...all]/route.ts`
@@ -603,6 +627,7 @@ git commit -m "feat: add account authentication"
 ## Task 5: Seed the User's Split
 
 **Files:**
+
 - Create: `src/lib/db/seed.ts`
 - Create: `src/app/api/seed/route.ts`
 - Test: `tests/integration/seed-route.test.ts`
@@ -637,54 +662,216 @@ export const starterPlan = {
       name: "Lower 1",
       weekday: 0,
       exercises: [
-        { name: "Cadeira flexora", sets: 3, repMin: 8, repMax: 12, instruction: "tronco levemente a frente" },
-        { name: "Cadeira adutora", sets: 2, repMin: 10, repMax: 15, instruction: "quadril flexionado" },
-        { name: "Leg press", sets: 3, repMin: 6, repMax: 10, instruction: "pes medios/altos" },
-        { name: "Elevacao pelvica", sets: 3, repMin: 6, repMax: 10, instruction: null },
-        { name: "Cadeira extensora", sets: 2, repMin: 10, repMax: 15, instruction: "quadril estendido" },
-        { name: "Panturrilha maquina", sets: 2, repMin: 10, repMax: 15, instruction: null }
-      ]
+        {
+          name: "Cadeira flexora",
+          sets: 3,
+          repMin: 8,
+          repMax: 12,
+          instruction: "tronco levemente a frente",
+        },
+        {
+          name: "Cadeira adutora",
+          sets: 2,
+          repMin: 10,
+          repMax: 15,
+          instruction: "quadril flexionado",
+        },
+        {
+          name: "Leg press",
+          sets: 3,
+          repMin: 6,
+          repMax: 10,
+          instruction: "pes medios/altos",
+        },
+        {
+          name: "Elevacao pelvica",
+          sets: 3,
+          repMin: 6,
+          repMax: 10,
+          instruction: null,
+        },
+        {
+          name: "Cadeira extensora",
+          sets: 2,
+          repMin: 10,
+          repMax: 15,
+          instruction: "quadril estendido",
+        },
+        {
+          name: "Panturrilha maquina",
+          sets: 2,
+          repMin: 10,
+          repMax: 15,
+          instruction: null,
+        },
+      ],
     },
     {
       name: "Upper 1",
       weekday: 1,
       exercises: [
-        { name: "Supino reto maquina", sets: 3, repMin: 5, repMax: 8, instruction: "ou Smith" },
-        { name: "Polia baixa para cima", sets: 2, repMin: 10, repMax: 15, instruction: "crucifixo inclinado" },
-        { name: "Puxada aberta maquina/barra", sets: 3, repMin: 6, repMax: 10, instruction: null },
-        { name: "T-bar row maquina", sets: 3, repMin: 6, repMax: 10, instruction: null },
-        { name: "Elevacao lateral maquina", sets: 2, repMin: 8, repMax: 12, instruction: null },
-        { name: "Rosca Scott", sets: 2, repMin: 8, repMax: 12, instruction: "ou Rosca Martelo padrao encurtado" },
-        { name: "Triceps polia barra W", sets: 2, repMin: 8, repMax: 12, instruction: null }
-      ]
+        {
+          name: "Supino reto maquina",
+          sets: 3,
+          repMin: 5,
+          repMax: 8,
+          instruction: "ou Smith",
+        },
+        {
+          name: "Polia baixa para cima",
+          sets: 2,
+          repMin: 10,
+          repMax: 15,
+          instruction: "crucifixo inclinado",
+        },
+        {
+          name: "Puxada aberta maquina/barra",
+          sets: 3,
+          repMin: 6,
+          repMax: 10,
+          instruction: null,
+        },
+        {
+          name: "T-bar row maquina",
+          sets: 3,
+          repMin: 6,
+          repMax: 10,
+          instruction: null,
+        },
+        {
+          name: "Elevacao lateral maquina",
+          sets: 2,
+          repMin: 8,
+          repMax: 12,
+          instruction: null,
+        },
+        {
+          name: "Rosca Scott",
+          sets: 2,
+          repMin: 8,
+          repMax: 12,
+          instruction: "ou Rosca Martelo padrao encurtado",
+        },
+        {
+          name: "Triceps polia barra W",
+          sets: 2,
+          repMin: 8,
+          repMax: 12,
+          instruction: null,
+        },
+      ],
     },
     {
       name: "Lower 2",
       weekday: 3,
       exercises: [
-        { name: "Stiff", sets: 3, repMin: 8, repMax: 12, instruction: "ou banco romano" },
-        { name: "Cadeira abdutora", sets: 2, repMin: 12, repMax: 20, instruction: "quadril flexionado" },
-        { name: "Leg press", sets: 3, repMin: 6, repMax: 10, instruction: "pes baixos, assento pra tras" },
-        { name: "Cadeira flexora", sets: 2, repMin: 8, repMax: 12, instruction: "quadril neutro" },
-        { name: "Leg press unilateral", sets: 2, repMin: 8, repMax: 12, instruction: "ou Bulgaro no Smith, quadril bem flexionado" },
-        { name: "Cadeira extensora", sets: 2, repMin: 10, repMax: 15, instruction: "quadril flexionado" },
-        { name: "Panturrilha maquina", sets: 2, repMin: 10, repMax: 15, instruction: null }
-      ]
+        {
+          name: "Stiff",
+          sets: 3,
+          repMin: 8,
+          repMax: 12,
+          instruction: "ou banco romano",
+        },
+        {
+          name: "Cadeira abdutora",
+          sets: 2,
+          repMin: 12,
+          repMax: 20,
+          instruction: "quadril flexionado",
+        },
+        {
+          name: "Leg press",
+          sets: 3,
+          repMin: 6,
+          repMax: 10,
+          instruction: "pes baixos, assento pra tras",
+        },
+        {
+          name: "Cadeira flexora",
+          sets: 2,
+          repMin: 8,
+          repMax: 12,
+          instruction: "quadril neutro",
+        },
+        {
+          name: "Leg press unilateral",
+          sets: 2,
+          repMin: 8,
+          repMax: 12,
+          instruction: "ou Bulgaro no Smith, quadril bem flexionado",
+        },
+        {
+          name: "Cadeira extensora",
+          sets: 2,
+          repMin: 10,
+          repMax: 15,
+          instruction: "quadril flexionado",
+        },
+        {
+          name: "Panturrilha maquina",
+          sets: 2,
+          repMin: 10,
+          repMax: 15,
+          instruction: null,
+        },
+      ],
     },
     {
       name: "Upper 2",
       weekday: 4,
       exercises: [
-        { name: "Puxada neutra maquina", sets: 3, repMin: 6, repMax: 10, instruction: "triangulo" },
-        { name: "Remada", sets: 2, repMin: 10, repMax: 15, instruction: "ou Cable Shrugs upper back" },
-        { name: "Supino inclinado halteres", sets: 3, repMin: 6, repMax: 10, instruction: null },
-        { name: "Voador", sets: 2, repMin: 10, repMax: 15, instruction: "ou crucifixo maquina" },
-        { name: "Elevacao lateral halteres + Elevacao frontal unilateral", sets: 2, repMin: 10, repMax: 15, instruction: null },
-        { name: "Rosca inclinada banco 45", sets: 2, repMin: 8, repMax: 12, instruction: "padrao alongado" },
-        { name: "Triceps frances maquina", sets: 2, repMin: 8, repMax: 12, instruction: null }
-      ]
-    }
-  ]
+        {
+          name: "Puxada neutra maquina",
+          sets: 3,
+          repMin: 6,
+          repMax: 10,
+          instruction: "triangulo",
+        },
+        {
+          name: "Remada",
+          sets: 2,
+          repMin: 10,
+          repMax: 15,
+          instruction: "ou Cable Shrugs upper back",
+        },
+        {
+          name: "Supino inclinado halteres",
+          sets: 3,
+          repMin: 6,
+          repMax: 10,
+          instruction: null,
+        },
+        {
+          name: "Voador",
+          sets: 2,
+          repMin: 10,
+          repMax: 15,
+          instruction: "ou crucifixo maquina",
+        },
+        {
+          name: "Elevacao lateral halteres + Elevacao frontal unilateral",
+          sets: 2,
+          repMin: 10,
+          repMax: 15,
+          instruction: null,
+        },
+        {
+          name: "Rosca inclinada banco 45",
+          sets: 2,
+          repMin: 8,
+          repMax: 12,
+          instruction: "padrao alongado",
+        },
+        {
+          name: "Triceps frances maquina",
+          sets: 2,
+          repMin: 8,
+          repMax: 12,
+          instruction: null,
+        },
+      ],
+    },
+  ],
 };
 ```
 
@@ -714,6 +901,7 @@ git commit -m "feat: add starter workout seed"
 ## Task 6: Implement Wikimedia Image Search
 
 **Files:**
+
 - Create: `src/lib/images/wikimedia.ts`
 - Create: `src/app/api/images/search/route.ts`
 - Test: `tests/unit/wikimedia.test.ts`
@@ -727,18 +915,27 @@ import { searchExerciseImage } from "@/lib/images/wikimedia";
 
 describe("searchExerciseImage", () => {
   it("returns a primary image url and source metadata", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      json: async () => ({
-        query: {
-          pages: {
-            "1": {
-              title: "File:Leg press machine.jpg",
-              imageinfo: [{ url: "https://upload.wikimedia.org/leg-press.jpg", descriptionurl: "https://commons.wikimedia.org/wiki/File:Leg_press_machine.jpg" }]
-            }
-          }
-        }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        json: async () => ({
+          query: {
+            pages: {
+              "1": {
+                title: "File:Leg press machine.jpg",
+                imageinfo: [
+                  {
+                    url: "https://upload.wikimedia.org/leg-press.jpg",
+                    descriptionurl:
+                      "https://commons.wikimedia.org/wiki/File:Leg_press_machine.jpg",
+                  },
+                ],
+              },
+            },
+          },
+        }),
       }),
-    }));
+    );
 
     const result = await searchExerciseImage("Leg press");
 
@@ -811,6 +1008,7 @@ git commit -m "feat: add exercise image search"
 ## Task 7: Build the Authenticated App Shell
 
 **Files:**
+
 - Create: `src/app/(app)/layout.tsx`
 - Create: `src/components/app-nav.tsx`
 - Modify: `src/app/page.tsx`
@@ -887,6 +1085,7 @@ git commit -m "feat: add authenticated app shell"
 ## Task 8: Build Workout Today Queries
 
 **Files:**
+
 - Create: `src/lib/workouts/get-today-workout.ts`
 - Test: `tests/unit/get-today-workout.test.ts`
 
@@ -958,6 +1157,7 @@ git commit -m "feat: add workout today query"
 ## Task 9: Build Workout Today UI
 
 **Files:**
+
 - Create: `src/components/today/exercise-card.tsx`
 - Create: `src/components/today/session-note.tsx`
 - Create: `src/app/(app)/today/page.tsx`
@@ -1032,7 +1232,8 @@ export function ExerciseCard({ exercise }: ExerciseCardProps) {
       <div className="space-y-1">
         <h2 className="text-xl font-semibold">{exercise.name}</h2>
         <p className="text-sm text-zinc-400">
-          {exercise.prescribedSets} sets • {exercise.repMin}-{exercise.repMax} reps
+          {exercise.prescribedSets} sets • {exercise.repMin}-{exercise.repMax}{" "}
+          reps
         </p>
       </div>
     </article>
@@ -1055,6 +1256,7 @@ git commit -m "feat: add workout today ui"
 ## Task 10: Add Debounced Session Entry Saving
 
 **Files:**
+
 - Create: `src/lib/workouts/save-session-entry.ts`
 - Create: `src/app/api/session-entries/route.ts`
 - Test: `tests/unit/save-session-entry.test.ts`
@@ -1117,6 +1319,7 @@ git commit -m "feat: add debounced session entry saving"
 ## Task 11: Build History
 
 **Files:**
+
 - Create: `src/lib/workouts/get-history.ts`
 - Create: `src/components/history/history-session-card.tsx`
 - Create: `src/app/(app)/history/page.tsx`
@@ -1191,6 +1394,7 @@ git commit -m "feat: add workout history"
 ## Task 12: Build Exercise Library
 
 **Files:**
+
 - Create: `src/components/library/exercise-library-item.tsx`
 - Create: `src/app/(app)/library/page.tsx`
 - Test: `tests/unit/exercise-library-item.test.tsx`
@@ -1270,6 +1474,7 @@ git commit -m "feat: add exercise library"
 ## Task 13: Build Plan Editor
 
 **Files:**
+
 - Create: `src/components/editor/day-editor.tsx`
 - Create: `src/components/editor/exercise-picker.tsx`
 - Create: `src/app/(app)/editor/page.tsx`
@@ -1339,6 +1544,7 @@ git commit -m "feat: add plan editor"
 ## Task 14: Add End-to-End Coverage
 
 **Files:**
+
 - Create: `playwright.config.ts`
 - Create: `tests/e2e/auth-and-seed.spec.ts`
 - Create: `tests/e2e/log-workout.spec.ts`
@@ -1352,7 +1558,9 @@ import { test, expect } from "@playwright/test";
 
 test("user can sign up and import the starter split", async ({ page }) => {
   await page.goto("/signup");
-  await expect(page.getByRole("heading", { name: /create your account/i })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /create your account/i }),
+  ).toBeVisible();
 });
 ```
 
@@ -1405,6 +1613,7 @@ git commit -m "test: add browser coverage for core flows"
 ## Task 15: Final Verification and Developer Experience
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `.env.example`
 - Modify: `package.json`

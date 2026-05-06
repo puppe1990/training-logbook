@@ -19,7 +19,10 @@ export async function getHistory(userId: string): Promise<HistorySession[]> {
     })
     .from(workoutSessions)
     .leftJoin(workoutDays, eq(workoutSessions.workoutDayId, workoutDays.id))
-    .leftJoin(sessionEntries, eq(sessionEntries.workoutSessionId, workoutSessions.id))
+    .leftJoin(
+      sessionEntries,
+      eq(sessionEntries.workoutSessionId, workoutSessions.id),
+    )
     .where(eq(workoutSessions.userId, userId))
     .groupBy(workoutSessions.id, workoutDays.name)
     .orderBy(desc(workoutSessions.performedOn));

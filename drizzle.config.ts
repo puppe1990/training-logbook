@@ -1,22 +1,23 @@
 import { defineConfig } from "drizzle-kit";
 
-const tursoDatabaseUrl = process.env.TURSO_DATABASE_URL;
+const databaseUrl = process.env.TURSO_DATABASE_URL ?? "file:local.db";
 const tursoAuthToken = process.env.TURSO_AUTH_TOKEN;
+const isLocalSqlite = databaseUrl.startsWith("file:");
 
-if (!tursoDatabaseUrl) {
-  throw new Error("Missing TURSO_DATABASE_URL for drizzle-kit");
-}
-
-if (!tursoAuthToken) {
+if (!isLocalSqlite && !tursoAuthToken) {
   throw new Error("Missing TURSO_AUTH_TOKEN for drizzle-kit");
 }
 
 export default defineConfig({
   schema: "./src/lib/db/schema.ts",
   out: "./drizzle",
-  dialect: "turso",
-  dbCredentials: {
-    url: tursoDatabaseUrl,
-    authToken: tursoAuthToken,
-  },
+  dialect: isLocalSqlite ? "sqlite" : "turso",
+  dbCredentials: isLocalSqlite
+    ? {
+        url: databaseUrl,
+      }
+    : {
+        url: databaseUrl,
+        authToken: tursoAuthToken,
+      },
 });

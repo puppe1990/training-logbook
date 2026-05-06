@@ -42,4 +42,13 @@ describe("readEnv", () => {
       tursoAuthToken: "token-123",
     });
   });
+
+  it("defaults database configuration to the local sqlite file", () => {
+    const env = readDatabaseEnv({});
+
+    expect(env).toEqual({
+      tursoUrl: "file:local.db",
+      tursoAuthToken: undefined,
+    });
+  });
 });

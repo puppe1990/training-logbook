@@ -11,10 +11,6 @@ describe("AppNav", () => {
       "href",
       "/today",
     );
-    expect(screen.getByRole("link", { name: "Plan" })).toHaveAttribute(
-      "href",
-      "/plan",
-    );
     expect(screen.getByRole("link", { name: "History" })).toHaveAttribute(
       "href",
       "/history",
@@ -27,5 +23,8 @@ describe("AppNav", () => {
       "href",
       "/editor",
     );
+    expect(
+      screen.queryByRole("link", { name: "Plan" }),
+    ).not.toBeInTheDocument();
   });
 });
